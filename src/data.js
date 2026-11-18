@@ -75,66 +75,83 @@ export const RADIOS = [
   { name: 'PALM FM 102.7', show: 'Salt Air', song: 'Coral Club — Salt Air' },
 ];
 
-// Seven story jobs, all original to Crimson Harbor. A stage is one of: drive
-// (reach the marker), pickup (press E), shoot (drop N of a gang), boss
-// (dialog, then drop the boss + guards), escape (reach the safehouse, then
-// lose the heat), deliver (drive, on a clock), talk (press E at Mara).
-// A stage may carry extra.wanted to raise the heat when it begins.
+// Seven story jobs, all original to Crimson Harbor — rebuilt from scratch,
+// nothing like Solmar City. Stage types: drive (reach the marker), pickup
+// (press E), talk (press E at Mara), collect (press E at N points in order),
+// follow (tail a courier van — stay in the band, too close is spotted,
+// too far is lost), photo (on foot, press E, hold still to take the picture),
+// activate (on foot, press E, hold still to light the beacon), swap (press E
+// to exchange a package — only while clean), listen (on foot, stay in the
+// listening ring — too close is spotted), distract (press E to set off a car
+// alarm, opening a 30s window), grab (press E to take the ledger inside the
+// window — if it closes, the guard returns and you distract again).
+// A stage may carry extra.wanted to raise the heat when it begins, or
+// extra.clean to fail the job if any heat appears during the stage.
 function job(id, ch, title, reward, brief, stages) {
   return { id, ch, title, reward, brief, stages: stages.map(([type, x, y, text, next, extra]) => ({ type, x, y, text, next, ...(extra || {}) })) };
 }
 export const MISSIONS = [
-  // M1 — Leo walks out of Port Valen Penitentiary and the PVPD is already
-  // waiting. No package, no plan: break the cordon and vanish.
-  job(1, 1, 'GATES OPEN', 800, 'Leo walks out of prison and the PVPD is already waiting. No plan — just run.', [
-    ['drive', 450, 450, 'Cut through Old Pier — the cordon is behind you', 'Break the cordon', { wanted: 4 }],
-    ['escape', 2550, 1950, 'Break line of sight, then reach the safehouse', 'Mara is waiting'],
-    ['talk', 1650, 1050, 'Mara is waiting in Harbor View', 'Job done'],
+  // M1 — a scavenger hunt, not a delivery: three envelopes Mara hid around
+  // the city. No clock, no cargo, no fight — just find them all.
+  job(1, 1, 'THREE ENVELOPES', 700, 'Mara stashed three envelopes around Port Valen — a new name, a clean plate, a way back in. Collect all three.', [
+    ['collect', 1950, 450, 'Collect the envelopes — 0/3 (press E at each)', 'Take them to Mara', { points: [{ x: 1950, y: 450 }, { x: 1050, y: 750 }, { x: 2550, y: 450 }] }],
+    ['talk', 1650, 1050, 'Take the envelopes to Mara in Harbor View', 'Job done'],
   ]),
-  // M2 — on-foot cleanup at the Vipers pit on Sunset Strip.
-  job(2, 2, 'VIPER PIT', 1200, 'The Vipers torched Mara\'s stash on the Strip. Go in on foot and clear the pit.', [
-    ['drive', 750, 2250, 'Drive to the Vipers pit on Sunset Strip', 'Get out and settle it'],
-    ['shoot', 750, 2250, 'Clear the pit — 6 Vipers down', 'Lose any heat', { count: 6, gang: 'vipers' }],
-    ['escape', 2550, 1950, 'Lose the heat, then reach the safehouse', 'Report back'],
-    ['talk', 1650, 1050, 'Report back to Mara in Harbor View', 'Job done'],
+  // M2 — surveillance, the opposite of a pursuit: tail a Kings courier van
+  // and learn where the stash house is. Getting too close is what fails you.
+  job(2, 2, 'THE LONG WAY HOME', 1400, 'A Kings courier is driving the night\'s take to a stash house. Tail him — don\'t get spotted, don\'t lose him — and Mara gets the address.', [
+    ['drive', 2850, 1950, 'Drive to Portside — the courier leaves at dusk', 'Tail the courier'],
+    ['follow', 2850, 1950, 'Tail the courier — stay close, don\'t get spotted', 'Report the stash address', { need: 25 }],
+    ['talk', 1650, 1050, 'Report the stash address to Mara', 'Job done'],
   ]),
-  // M3 — boss Big Ray Calloway + his guards at the Kings dock.
-  job(3, 3, 'RAY\'S LAST TIDE', 2000, 'Big Ray Calloway thinks the harbor is his. Prove him wrong — at the Kings\' own dock.', [
-    ['drive', 2850, 1650, 'Drive to the Kings dock in Portside', 'Face Big Ray'],
-    ['boss', 2850, 1650, 'Take down Big Ray Calloway', 'Lose any heat'],
-    ['escape', 2550, 1950, 'Lose the heat, then reach the safehouse', 'Report back'],
-    ['talk', 1650, 1050, 'Report back to Mara in Harbor View', 'Job done'],
+  // M3 — evidence, not a shootout: photograph a PVPD captain taking Kings
+  // money. On foot, steady, unseen — the camera does the fighting.
+  job(3, 3, 'PICTURE PROOF', 1800, 'A PVPD captain takes Kings money every night at the Coral Row garage. Get a photograph — on foot, steady, unseen.', [
+    ['drive', 2850, 1350, 'Drive to the Coral Row garage', 'Get the photo'],
+    ['photo', 2850, 1350, 'On foot — press E, hold still for the photo', 'Take the photo to Mara', { holdSecs: 3 }],
+    ['talk', 1650, 1050, 'Take the photo to Mara in Harbor View', 'Job done'],
   ]),
-  // M4 — sabotage: burn the Kings' pirate radio relay, no cargo, no kills.
-  job(4, 4, 'STATIC BURN', 1500, 'The Harbor Kings run a pirate relay that snitches on every crew in the city. Mara wants it dark.', [
-    ['drive', 1950, 750, 'Drive to the relay tower in Harbor View', 'Plant the charge'],
-    ['pickup', 1950, 750, 'Press E to plant the charge', 'The tower is burning'],
-    ['escape', 2550, 1950, 'Lose the heat, then reach the safehouse', 'Report back'],
-    ['talk', 1650, 1050, 'Report back to Mara in Harbor View', 'Job done'],
+  // M4 — a covert exchange, not a delivery: two dead drops, one clean swap.
+  // Any heat at any point blows the deal — drive like a ghost.
+  job(4, 4, 'THE CLEAN SWAP', 2000, 'A buyer wants Mara\'s goods and Mara wants his cash. Two dead drops, one clean swap — any heat and the deal is blown.', [
+    ['drive', 750, 1350, 'Drive to the first dead drop in Foundry Row — stay clean', 'Leave the package', { clean: true }],
+    ['swap', 750, 1350, 'Press E to leave the package — stay clean', 'Get the cash at the second drop', { clean: true }],
+    ['drive', 1350, 2250, 'Drive to the second dead drop on Sunset Strip — stay clean', 'Pick up the cash', { clean: true }],
+    ['swap', 1350, 2250, 'Press E to pick up the cash — stay clean', 'Report back', { clean: true }],
+    ['talk', 1650, 1050, 'Report back to Mara', 'Job done'],
   ]),
-  // M5 — rescue the ferryman from the Docksiders and drive him out.
-  job(5, 5, 'FERRYMAN\'S DUE', 1800, 'A ferryman who owes Mara is being squeezed by the Docksiders on the east pier. Get him out.', [
-    ['drive', 2850, 750, 'Drive to the ferryman on the east pier', 'Get him in the car'],
-    ['pickup', 2850, 750, 'Press E to get the ferryman in the car', 'Drive — they are coming'],
-    ['escape', 2550, 1950, 'Outrun the Docksiders to the safehouse', 'Report back'],
-    ['talk', 1650, 1050, 'Report back to Mara in Harbor View', 'Job done'],
+  // M5 — eavesdropping, not combat: stay in the listening ring long enough
+  // to hear the fleet's sailing time. Too close and you are spotted.
+  job(5, 5, 'THE WIRE', 1600, 'The Kings are meeting at the marina tonight to set the fleet\'s sailing time. Get close enough to hear — not close enough to be seen.', [
+    ['drive', 2250, 450, 'Drive to the marina in Marina Bay', 'Listen in'],
+    ['listen', 1950, 450, 'Listen on foot — stay in the zone, don\'t get too close', 'Report what you heard', { inner: 120, outer: 280, need: 20 }],
+    ['talk', 1650, 1050, 'Report the sailing time to Mara', 'Job done'],
   ]),
-  // M6 — five of the lantern crew, then the Dockmaster himself.
-  job(6, 6, 'FIVE LANTERNS', 2500, 'The Docksiders light five signal lanterns along the south port to guide their smugglers in. Mara wants them dark.', [
-    ['drive', 2850, 2250, 'Drive to the lanterns at the south port', 'Drop the lantern crew'],
-    ['shoot', 2850, 2250, 'Drop the lantern crew — 5 down', 'The Dockmaster is next', { count: 5, gang: 'docksiders' }],
-    ['boss', 2850, 2250, 'Take down the Dockmaster', 'Lose any heat'],
-    ['escape', 2550, 1950, 'Lose the heat, then reach the safehouse', 'Job done'],
+  // M6 — a timing puzzle, not a fight: set off a car alarm to pull the guard
+  // away, then grab the ledger before the 30s window closes. Miss it and
+  // the guard comes back — set the alarm off again.
+  job(6, 6, 'THE LOUD DISTRACTION', 2500, 'The Kings keep their ledger in the Coral Row office, and a guard never leaves the door. Set off the car alarm across the street — while he\'s looking the other way, grab the ledger.', [
+    ['drive', 2550, 1350, 'Drive to the Coral Row office', 'Set off the distraction'],
+    ['distract', 2550, 1350, 'Press E to set off the car alarm', 'Grab the ledger — fast'],
+    ['grab', 2850, 1350, 'Grab the ledger — 30s left', 'Get the ledger to Mara', { window: 30 }],
+    ['talk', 1650, 1050, 'Take the ledger to Mara in Harbor View', 'Job done'],
   ]),
-  // M7 — boss Dario Venn at his Palm Court penthouse.
-  job(7, 7, 'THE MAN WHO SIGNED', 4000, 'Dario Venn signed the paper that put Leo inside four years ago. Tonight, at his own penthouse, Leo makes him unsign it.', [
-    ['drive', 2850, 450, 'Drive to Venn\'s penthouse in Palm Court', 'Go in loud'],
-    ['boss', 2850, 450, 'Take down Dario Venn and his crew', 'Lose any heat'],
-    ['escape', 2550, 1950, 'Lose the heat, then reach the safehouse', 'Finish it'],
+  // M7 — the finale is a light, not a gunfight: photograph the fleet, take
+  // the lighthouse key, and light the old beacon so the whole harbor — and
+  // the PVPD — sees the Kings' smuggling fleet sail.
+  job(7, 7, 'LIGHT UP THE HARBOR', 4500, 'The Kings\' smuggling fleet sails tonight, dark and quiet. Light the old lighthouse and the whole harbor — and the PVPD — sees them.', [
+    ['drive', 3150, 2250, 'Drive to the Portside pier — the fleet sails tonight', 'Photograph the fleet'],
+    ['photo', 3150, 2250, 'On foot — press E, hold still to photograph the fleet', 'Get the lighthouse key', { holdSecs: 3 }],
+    ['pickup', 450, 450, 'Press E to take the lighthouse key at Old Pier', 'Light the lighthouse'],
+    ['activate', 150, 150, 'Press E and hold to light the beacon', 'Meet Mara', { holdSecs: 4 }],
     ['talk', 1650, 1050, 'Meet Mara one last time', 'Job done'],
   ]),
 ];
 
+// Boss portraits — retained for import compatibility (entities.js imports
+// BOSSES for spawnBoss). No current mission uses a 'boss' stage; the new
+// seven jobs are won with a camera, a tail, a swap, an ear, an alarm and a
+// lighthouse, not a boss fight.
 export const BOSSES = {
   3: { name: 'BIG RAY CALLOWAY', role: 'HARBOR KINGS BOSS', line: 'Four years inside and you still think you\'re a driver? This harbor eats drivers. Boys — feed him to the water.', color: '#e8b04b', bg: '#6a5a30', shirt: '#8a6a2a', skin: '#d8a06a', hair: '#4a2a10', shades: false, hat: null, hp: 420, guards: 4 },
   6: { name: 'IVAN KROSS', role: 'DOCKMASTER OF THE LANTERNS', line: 'You want my lanterns dark? Then you go dark first. Boys — hold the line.', color: '#5aa8e8', bg: '#1f2a3a', shirt: '#2a4a6a', skin: '#c98a5e', hair: '#3a2a1a', shades: false, hat: '#e8b04b', hp: 380, guards: 2 },

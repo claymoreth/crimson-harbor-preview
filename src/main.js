@@ -450,6 +450,8 @@ export class Game {
       const len = Math.hypot(mx, my) || 1;
       const moving = (mx || my) ? 1 : 0;
       moveCircle(p, (mx / len) * sp * dt * moving, (my / len) * sp * dt * moving, 11);
+      // Walk cycle: legs swing only while actually moving on foot.
+      if (moving) p.walkPhase = (p.walkPhase || 0) + dt * 11;
       // Aim at the mouse.
       const sx = p.x - this.cam.x;
       const sy = p.y - this.cam.y;
@@ -818,7 +820,7 @@ export class Game {
     for (const ped of this.peds) {
       if (ped.x < -100) continue;
       if (ped.x < cam.x - 30 || ped.x > cam.x + W + 30 || ped.y < cam.y - 30 || ped.y > cam.y + H + 30) continue;
-      drawPerson(ctx, ped.x, ped.y, ped.angle, ped.color, false);
+      drawPerson(ctx, ped.x, ped.y, ped.angle, ped.color, false, undefined, ped.walkPhase || 0);
     }
     // Traffic.
     for (const t of this.traffic) {
@@ -842,7 +844,7 @@ export class Game {
     }
     // Player car / player.
     if (p.inCar && p.car) drawCar(ctx, p.car);
-    else drawPerson(ctx, p.x, p.y, p.angle, CHARACTERS[p.charIndex].color, true, p.angle);
+    else drawPerson(ctx, p.x, p.y, p.angle, CHARACTERS[p.charIndex].color, true, p.angle, p.walkPhase || 0);
     // Bullets.
     for (const b of bullets) {
       ctx.strokeStyle = '#ffe9a8';

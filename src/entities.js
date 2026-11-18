@@ -16,7 +16,7 @@ export function makePlayer(x, y, charIndex) {
     angle: -Math.PI / 2,
     hp: 100, maxHp: 100,
     inCar: false, car: null,
-    speed: 0, charIndex,
+    speed: 0, charIndex, walkPhase: 0,
     weapon: 1, ammo: {}, reserve: {},
     fireCd: 0, reloadCd: 0, sprint: false, dead: false, bustT: 0,
   };
@@ -166,11 +166,13 @@ export function updatePeds(list, dt, player, danger) {
       p.panic -= dt;
       p.angle = angTo(player.x, player.y, p.x, p.y);
       moveCircle(p, Math.cos(p.angle) * 90 * dt, Math.sin(p.angle) * 90 * dt, 8);
+      p.walkPhase = (p.walkPhase || 0) + dt * 11;
     } else if (p.wanderT <= 0) {
       p.wanderT = 2 + Math.random() * 4;
       p.angle = Math.random() * TAU;
     } else {
       moveCircle(p, Math.cos(p.angle) * p.speed * dt, Math.sin(p.angle) * p.speed * dt, 8);
+      p.walkPhase = (p.walkPhase || 0) + dt * 9;
     }
   }
 }
@@ -282,8 +284,10 @@ export function updateEnemies(list, dt, game) {
     // Close in a little, keep some distance, strafe.
     if (d > 320) {
       moveCircle(e, Math.cos(e.angle) * 70 * dt, Math.sin(e.angle) * 70 * dt, 10);
+      e.walkPhase = (e.walkPhase || 0) + dt * 10;
     } else if (d < 130) {
       moveCircle(e, -Math.cos(e.angle) * 40 * dt, -Math.sin(e.angle) * 40 * dt, 10);
+      e.walkPhase = (e.walkPhase || 0) + dt * 10;
     }
     if (e.fireCd <= 0 && d < 520 && !lineBlocked(e.x, e.y, p.x, p.y)) {
       e.fireCd = e.isBoss ? 1.1 : 1.6 + Math.random();
@@ -426,55 +430,89 @@ export function drawCar(ctx, car) {
 // facing the aim direction, and a long gun barrel when aiming. The player
 // is larger still, with a white ring and a LEO label, so on foot the player
 // can never be mistaken for a car.
-export function drawPerson(ctx, x, y, angle, color, isPlayer, aimAngle) {
+export function drawPerson(ctx, x, y, angle, color, isPlayer, aimAngle, walkPhase = 0) {
   const R = isPlayer ? 17 : 12;
   ctx.save();
   ctx.translate(x, y);
   // Shadow.
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ctx.beginPath();
-  ctx.ellipse(2, 4, R + 3, R + 1, 0, 0, TAU);
+  ctx.ellipse(2, 4, R + 4, R + 2, 0, 0, TAU);
   ctx.fill();
   ctx.rotate(angle);
-  // Gun barrel, long and dark, pointing where the person aims.
+  // --- Legs: two dark shapes at the BACK of the body, swinging alternately
+  // as the person walks (walkPhase advances only while moving). Standing
+  // still = legs together, side by side. Never a circle: legs are clearly
+  // behind the torso, not part of it.
+  const swing = Math.sin(walkPhase) * R * 0.30;
+  ctx.fillStyle = '#1f1f2a';
+  ctx.beginPath();
+  ctx.ellipse(-R * 0.82 + swing, -R * 0.45, R * 0.30, R * 0.22, 0, 0, TAU);
+  ctx.ellipse(-R * 0.82 - swing, R * 0.45, R * 0.30, R * 0.22, 0, 0, TAU);
+  ctx.fill();
+  // --- Torso: an ELONGATED ellipse (longer along the facing axis than
+  // wide), shirt colour. Deliberately NOT a circle — a circle reads as a
+  // ball, this reads as a body with shoulders.
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, R * 0.85, R * 0.66, 0, 0, TAU);
+  ctx.fill();
+  // Shoulders, either side of the torso — the wide shoulder line.
+  ctx.beginPath();
+  ctx.arc(R * 0.25, -R * 0.52, R * 0.30, 0, TAU);
+  ctx.arc(R * 0.25, R * 0.52, R * 0.30, 0, TAU);
+  ctx.fill();
+  // Belt / jacket stripe across the waist.
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.fillRect(-R * 0.28, -R * 0.62, R * 0.24, R * 1.24);
+  // Rear arm, hanging at the side.
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(-R * 0.15, -R * 0.60, R * 0.24, 0, TAU);
+  ctx.fill();
+  // --- Gun, held at the side of the head (offset so it never crosses the
+  // face): dark barrel + yellow muzzle tip. The forward arm reaches from
+  // the shoulder to the grip, and the HAND (skin) circles the grip — the
+  // pistol is visibly HELD, not floating out of the middle of a circle.
   if (aimAngle !== undefined) {
     ctx.strokeStyle = '#14141c';
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.moveTo(R * 0.4, 0);
-    ctx.lineTo(R + 18, 0);
+    ctx.moveTo(R * 0.50, R * 0.45);
+    ctx.lineTo(R + 19, R * 0.45);
     ctx.stroke();
     ctx.fillStyle = '#ffd24b';
-    ctx.fillRect(R + 16, -2, 5, 4);
+    ctx.fillRect(R + 17, R * 0.45 - 2, 5, 4);
+    // Forward arm: shoulder -> grip.
+    ctx.strokeStyle = color;
+    ctx.lineWidth = R * 0.30;
+    ctx.beginPath();
+    ctx.moveTo(R * 0.30, R * 0.55);
+    ctx.lineTo(R * 0.72, R * 0.45);
+    ctx.stroke();
+    // Hand gripping the pistol.
+    ctx.fillStyle = '#e8b98a';
+    ctx.beginPath();
+    ctx.arc(R * 0.72, R * 0.45, R * 0.19, 0, TAU);
+    ctx.fill();
   }
-  // Torso — a big circle in the shirt colour.
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(0, 0, R, 0, TAU);
-  ctx.fill();
-  // Shoulders, either side of the torso.
-  ctx.beginPath();
-  ctx.arc(0, -R * 0.62, R * 0.42, 0, TAU);
-  ctx.arc(0, R * 0.62, R * 0.42, 0, TAU);
-  ctx.fill();
-  // Belt / jacket stripe across the chest.
-  ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  ctx.fillRect(-R * 0.4, -R * 0.9, R * 0.8, R * 0.28);
-  // Head (skin), pushed forward in the facing direction.
+  // --- Head: a SEPARATE small skin circle, pushed forward so its front
+  // half clearly sticks out beyond the torso. Head and body are two
+  // different shapes — never one merged blob.
   ctx.fillStyle = '#e8b98a';
   ctx.beginPath();
-  ctx.arc(R * 0.48, 0, R * 0.44, 0, TAU);
+  ctx.arc(R * 0.95, 0, R * 0.42, 0, TAU);
   ctx.fill();
   // Hair cap on the back of the head.
   ctx.fillStyle = '#2b2118';
   ctx.beginPath();
-  ctx.arc(R * 0.30, 0, R * 0.44, Math.PI * 0.5, Math.PI * 1.5);
+  ctx.arc(R * 0.80, 0, R * 0.42, Math.PI * 0.5, Math.PI * 1.5);
   ctx.fill();
   // Eyes, looking where the person faces.
   ctx.fillStyle = '#14141c';
   ctx.beginPath();
-  ctx.arc(R * 0.72, -R * 0.16, R * 0.09, 0, TAU);
-  ctx.arc(R * 0.72, R * 0.16, R * 0.09, 0, TAU);
+  ctx.arc(R * 1.18, -R * 0.16, R * 0.09, 0, TAU);
+  ctx.arc(R * 1.18, R * 0.16, R * 0.09, 0, TAU);
   ctx.fill();
   ctx.restore();
   if (isPlayer) {
@@ -506,7 +544,7 @@ export function drawEnemy(ctx, e) {
     }
     return;
   }
-  drawPerson(ctx, e.x, e.y, e.angle, e.color, false, e.angle);
+  drawPerson(ctx, e.x, e.y, e.angle, e.color, false, e.angle, e.walkPhase || 0);
   // Red triangle marker above the head.
   const bob = Math.sin(performance.now() / 200) * 3;
   ctx.fillStyle = '#ff2a2a';

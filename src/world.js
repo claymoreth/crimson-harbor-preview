@@ -139,7 +139,11 @@ export function drawWorld(ctx, cam, game) {
       ctx.fillRect(Math.max(0, vx), y - ROAD_W / 2, Math.min(3300, vx + vw) - Math.max(0, vx), ROAD_W);
     }
   }
-  // road center dashes
+  // road center dashes — WORLD-ANCHORED: every line is drawn from the full
+  // world extent (y 0..2400 / x 0..3300) and the canvas clips it to the
+  // viewport. The dash pattern is anchored at the world origin, so it can
+  // never crawl or follow the camera. (Previously each line started at the
+  // visible viewport edge, so the dash phase shifted with the camera.)
   ctx.strokeStyle = night ? 'rgba(255,220,120,0.5)' : 'rgba(255,220,120,0.75)';
   ctx.lineWidth = 3;
   ctx.setLineDash([18, 22]);
@@ -147,8 +151,8 @@ export function drawWorld(ctx, cam, game) {
     const x = 150 + k * ROAD_STEP;
     if (x > vx && x < vx + vw) {
       ctx.beginPath();
-      ctx.moveTo(x, Math.max(0, vy));
-      ctx.lineTo(x, Math.min(2400, vy + vh));
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, 2400);
       ctx.stroke();
     }
   }
@@ -156,8 +160,8 @@ export function drawWorld(ctx, cam, game) {
     const y = 150 + k * ROAD_STEP;
     if (y > vy && y < vy + vh) {
       ctx.beginPath();
-      ctx.moveTo(Math.max(0, vx), y);
-      ctx.lineTo(Math.min(3300, vx + vw), y);
+      ctx.moveTo(0, y);
+      ctx.lineTo(3300, y);
       ctx.stroke();
     }
   }

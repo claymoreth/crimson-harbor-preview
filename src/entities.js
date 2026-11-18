@@ -381,18 +381,45 @@ export function drawCar(ctx, car) {
   ctx.fillStyle = 'rgba(0,0,0,0.30)';
   ctx.fillRect(-20, -11, 44, 26);
   if (car.isPolice) {
+    // Classic black-and-white police car (Mana, 19 Nov: the old one — plain
+    // white + a red stripe down the middle + a dark block — looked wrong).
+    // Real black-and-whites: black hood + trunk, white doors, dark glass,
+    // a red/blue light bar on the roof centre, headlights + taillights.
+    // NO red stripe down the middle. Rotated frame: +x = front.
+    // White doors (middle of the body).
     ctx.fillStyle = '#e8e8f0';
     ctx.fillRect(-22, -13, 44, 26);
-    ctx.fillStyle = '#1f2a44';
-    ctx.fillRect(-22, -13, 44, 10);
+    // Hood (front) and trunk (rear) in black.
+    ctx.fillStyle = '#101018';
+    ctx.fillRect(12, -13, 10, 26);
+    ctx.fillRect(-22, -13, 10, 26);
+    // Windshields: dark glass, front (just behind the hood) + rear (just
+    // ahead of the trunk).
+    ctx.fillStyle = '#16202e';
+    ctx.fillRect(8, -11, 4, 22);
+    ctx.fillRect(-12, -11, 4, 22);
+    // Door seam across the white middle so the doors read as doors.
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.fillRect(0, -12, 1, 24);
+    // Headlights (front corners, pale yellow) + taillights (rear corners).
+    ctx.fillStyle = '#ffe9a8';
+    ctx.fillRect(20, -11, 2, 4);
+    ctx.fillRect(20, 7, 2, 4);
     ctx.fillStyle = '#c22a2a';
-    ctx.fillRect(-4, -13, 8, 26);
-    // Light bar flashing.
+    ctx.fillRect(-22, -11, 2, 4);
+    ctx.fillRect(-22, 7, 2, 4);
+    // Grille between the headlights (dark grey so it shows on the black hood).
+    ctx.fillStyle = '#3a3a44';
+    ctx.fillRect(20, -4, 2, 8);
+    // Light bar on the roof centre: dark housing, red on one lateral half
+    // and blue on the other, flashing alternately.
     const on = Math.floor(performance.now() / 180) % 2 === 0;
+    ctx.fillStyle = '#14141c';
+    ctx.fillRect(-3, -10, 6, 20);
     ctx.fillStyle = on ? '#ff2a2a' : '#2a6aff';
-    ctx.fillRect(-6, -15, 12, 4);
+    ctx.fillRect(-2, -9, 4, 9);
     ctx.fillStyle = on ? '#2a6aff' : '#ff2a2a';
-    ctx.fillRect(-6, 11, 12, 4);
+    ctx.fillRect(-2, 0, 4, 9);
   } else {
     ctx.fillStyle = car.def.color;
     ctx.fillRect(-22, -13, 44, 26);

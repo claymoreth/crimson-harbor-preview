@@ -844,7 +844,7 @@ export class Game {
     }
     // Player car / player.
     if (p.inCar && p.car) drawCar(ctx, p.car);
-    else drawPerson(ctx, p.x, p.y, p.angle, CHARACTERS[p.charIndex].color, true, p.angle, p.walkPhase || 0);
+    else drawPerson(ctx, p.x, p.y, p.angle, CHARACTERS[p.charIndex].shirt, true, p.angle, p.walkPhase || 0);
     // Bullets.
     for (const b of bullets) {
       ctx.strokeStyle = '#ffe9a8';

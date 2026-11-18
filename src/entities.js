@@ -2,7 +2,7 @@
 // police, gang enemies and bosses, bullets, particles. Everything the HUD
 // shows reads from here.
 import { WORLD_W, WORLD_H, ROAD_STEP, WEAPONS, CARS, POLICE_NAMES, GANGS, BOSSES } from './data.js';
-import { clamp, dist, angTo, angDiff, TAU } from './util.js';
+import { clamp, dist, angTo, angDiff, TAU, rr } from './util.js';
 import { moveCircle, isWater, onRoad, lineBlocked } from './world.js';
 import { sfx } from './audio.js';
 
@@ -49,7 +49,7 @@ export function driveCar(car, input, dt, topMul = 1) {
   if (!input.up && !input.down) car.speed -= Math.sign(car.speed) * 120 * dt;
   if (Math.abs(car.speed) < 4 && !input.up && !input.down) car.speed = 0;
   car.speed = clamp(car.speed, -160, top);
-  const steerAmt = (input.left ? 1 : 0) - (input.right ? 1 : 0);
+  const steerAmt = (input.right ? 1 : 0) - (input.left ? 1 : 0);
   const dir = car.speed >= 0 ? 1 : -1;
   const drift = input.drift ? 1.9 : 1;
   car.angle += steerAmt * 2.6 * drift * (Math.min(Math.abs(car.speed), 300) / 300) * dir * dt;
@@ -127,7 +127,7 @@ export function updateTraffic(list, dt, player) {
     }
     const want = angTo(c.x, c.y, c.target.x, c.target.y);
     const diff = angDiff(c.angle, want);
-    const input = { up: true, down: false, left: diff > 0.12, right: diff < -0.12, drift: false };
+    const input = { up: true, down: false, left: diff < -0.12, right: diff > 0.12, drift: false };
     // Slow down for the player / other cars ahead.
     const ahead = dist(c.x + Math.cos(c.angle) * 70, c.y + Math.sin(c.angle) * 70, player.x, player.y);
     if (ahead < 60) input.up = false;
@@ -209,12 +209,12 @@ export function updatePolice(list, dt, game) {
       const ty = py + Math.sin(p.angle || 0) * 260;
       const want = angTo(c.x, c.y, tx, ty);
       const diff = angDiff(c.angle, want);
-      input = { up: d > 60, down: false, left: diff > 0.15, right: diff < -0.15, drift: false };
+      input = { up: d > 60, down: false, left: diff < -0.15, right: diff > 0.15, drift: false };
       if (dist(c.x, c.y, tx, ty) < 70) input.up = false;
     } else {
       const want = angTo(c.x, c.y, px, py);
       const diff = angDiff(c.angle, want);
-      input = { up: true, down: false, left: diff > 0.1, right: diff < -0.1, drift: false };
+      input = { up: true, down: false, left: diff < -0.1, right: diff > 0.1, drift: false };
     }
     const topMul = game.wanted >= 4 ? 1.06 : game.wanted >= 3 ? 1.0 : 0.94;
     driveCar(c, input, dt, topMul);
@@ -431,88 +431,114 @@ export function drawCar(ctx, car) {
 // is larger still, with a white ring and a LEO label, so on foot the player
 // can never be mistaken for a car.
 export function drawPerson(ctx, x, y, angle, color, isPlayer, aimAngle, walkPhase = 0) {
+  // Top-down HUMAN, drawn as separate parts with visible gaps — never one
+  // solid oval. (Mana, 19 Nov: the old big gold ellipse + tiny head read as
+  // a TURTLE: oval = shell, small head = turtle head.) So: narrow torso
+  // (rounded rect, NOT an ellipse), a BIG head clearly out in front, arms
+  // and legs as separate capsules with daylight between them and the torso,
+  // dark trousers, jacket details so the torso reads as CLOTHING.
+  // Rotated frame: +x = facing direction, y = lateral.
   const R = isPlayer ? 17 : 12;
   ctx.save();
   ctx.translate(x, y);
-  // Shadow.
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  // Shadow — small and soft, never wider than the figure.
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
   ctx.beginPath();
-  ctx.ellipse(2, 4, R + 4, R + 2, 0, 0, TAU);
+  ctx.ellipse(2, 4, R * 0.95, R * 0.75, 0, 0, TAU);
   ctx.fill();
   ctx.rotate(angle);
-  // --- Legs: two dark shapes at the BACK of the body, swinging alternately
-  // as the person walks (walkPhase advances only while moving). Standing
-  // still = legs together, side by side. Never a circle: legs are clearly
-  // behind the torso, not part of it.
+  // --- Legs: two dark trouser capsules BEHIND the torso, clearly separated
+  // by a gap in the middle, swinging alternately while walking. They stick
+  // out well past the torso so the figure has visible legs, not a shell.
   const swing = Math.sin(walkPhase) * R * 0.30;
-  ctx.fillStyle = '#1f1f2a';
+  ctx.fillStyle = '#23232e';
   ctx.beginPath();
-  ctx.ellipse(-R * 0.82 + swing, -R * 0.45, R * 0.30, R * 0.22, 0, 0, TAU);
-  ctx.ellipse(-R * 0.82 - swing, R * 0.45, R * 0.30, R * 0.22, 0, 0, TAU);
+  ctx.ellipse(-R * 0.95 + swing, -R * 0.38, R * 0.45, R * 0.20, 0, 0, TAU);
+  ctx.ellipse(-R * 0.95 - swing, R * 0.38, R * 0.45, R * 0.20, 0, 0, TAU);
   ctx.fill();
-  // --- Torso: an ELONGATED ellipse (longer along the facing axis than
-  // wide), shirt colour. Deliberately NOT a circle — a circle reads as a
-  // ball, this reads as a body with shoulders.
+  // Shoe tips, slightly lighter than the trousers.
+  ctx.fillStyle = '#3d3d4a';
+  ctx.beginPath();
+  ctx.ellipse(-R * 1.36 + swing, -R * 0.38, R * 0.15, R * 0.20, 0, 0, TAU);
+  ctx.ellipse(-R * 1.36 - swing, R * 0.38, R * 0.15, R * 0.20, 0, 0, TAU);
+  ctx.fill();
+  // --- Torso: a NARROW rounded rect (flat sides, clearly longer than wide),
+  // shirt colour. Deliberately NOT an ellipse and NOT as wide as the old
+  // blob — the old ellipse + same-colour shoulders merged into one oval.
   ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.ellipse(0, 0, R * 0.85, R * 0.66, 0, 0, TAU);
+  rr(ctx, -R * 0.55, -R * 0.48, R * 1.10, R * 0.96, R * 0.30);
   ctx.fill();
-  // Shoulders, either side of the torso — the wide shoulder line.
-  ctx.beginPath();
-  ctx.arc(R * 0.25, -R * 0.52, R * 0.30, 0, TAU);
-  ctx.arc(R * 0.25, R * 0.52, R * 0.30, 0, TAU);
-  ctx.fill();
-  // Belt / jacket stripe across the waist.
+  // Jacket details so the torso reads as CLOTHING, not a shell: zipper line
+  // down the middle, chest band near the shoulders, belt at the waist.
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fillRect(-R * 0.45, -R * 0.03, R * 0.85, R * 0.06);
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.fillRect(-R * 0.28, -R * 0.62, R * 0.24, R * 1.24);
-  // Rear arm, hanging at the side.
-  ctx.fillStyle = color;
+  ctx.fillRect(R * 0.28, -R * 0.48, R * 0.14, R * 0.96);
+  ctx.fillRect(-R * 0.55, -R * 0.48, R * 0.10, R * 0.96);
+  // Light shirt V at the chest (front of the jacket).
+  ctx.fillStyle = 'rgba(232,232,232,0.85)';
   ctx.beginPath();
-  ctx.arc(-R * 0.15, -R * 0.60, R * 0.24, 0, TAU);
+  ctx.moveTo(R * 0.55, -R * 0.16);
+  ctx.lineTo(R * 0.55, R * 0.16);
+  ctx.lineTo(R * 0.30, 0);
+  ctx.closePath();
   ctx.fill();
-  // --- Gun, held at the side of the head (offset so it never crosses the
-  // face): dark barrel + yellow muzzle tip. The forward arm reaches from
-  // the shoulder to the grip, and the HAND (skin) circles the grip — the
+  // --- Arms: two thin capsules at the SIDES, clearly separated from the
+  // torso by a visible gap (road shows through). Sleeves a shade darker
+  // than the torso so they read as separate limbs, not part of the blob.
+  for (const side of [-1, 1]) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.ellipse(R * 0.05, side * R * 0.75, R * 0.55, R * 0.16, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(R * 0.05, side * R * 0.75, R * 0.55, R * 0.16, 0, 0, TAU);
+    ctx.fill();
+  }
+  // --- Gun, held BESIDE the head (offset so it never crosses the face):
+  // dark barrel + yellow muzzle tip. The forward arm reaches from the
+  // shoulder to the grip, and the HAND (skin) circles the grip — the
   // pistol is visibly HELD, not floating out of the middle of a circle.
   if (aimAngle !== undefined) {
     ctx.strokeStyle = '#14141c';
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.moveTo(R * 0.50, R * 0.45);
-    ctx.lineTo(R + 19, R * 0.45);
+    ctx.moveTo(R * 0.55, R * 0.62);
+    ctx.lineTo(R + 20, R * 0.62);
     ctx.stroke();
     ctx.fillStyle = '#ffd24b';
-    ctx.fillRect(R + 17, R * 0.45 - 2, 5, 4);
+    ctx.fillRect(R + 18, R * 0.62 - 2, 5, 4);
     // Forward arm: shoulder -> grip.
     ctx.strokeStyle = color;
-    ctx.lineWidth = R * 0.30;
+    ctx.lineWidth = R * 0.28;
     ctx.beginPath();
-    ctx.moveTo(R * 0.30, R * 0.55);
-    ctx.lineTo(R * 0.72, R * 0.45);
+    ctx.moveTo(R * 0.25, R * 0.70);
+    ctx.lineTo(R * 0.75, R * 0.62);
     ctx.stroke();
     // Hand gripping the pistol.
     ctx.fillStyle = '#e8b98a';
     ctx.beginPath();
-    ctx.arc(R * 0.72, R * 0.45, R * 0.19, 0, TAU);
+    ctx.arc(R * 0.75, R * 0.62, R * 0.19, 0, TAU);
     ctx.fill();
   }
-  // --- Head: a SEPARATE small skin circle, pushed forward so its front
-  // half clearly sticks out beyond the torso. Head and body are two
-  // different shapes — never one merged blob.
+  // --- Head: BIG and clearly separate — a skin circle pushed forward so
+  // most of it sticks out beyond the torso. A turtle's head is tiny next
+  // to its shell; a person's head is big and obvious.
   ctx.fillStyle = '#e8b98a';
   ctx.beginPath();
-  ctx.arc(R * 0.95, 0, R * 0.42, 0, TAU);
+  ctx.arc(R * 1.02, 0, R * 0.55, 0, TAU);
   ctx.fill();
   // Hair cap on the back of the head.
   ctx.fillStyle = '#2b2118';
   ctx.beginPath();
-  ctx.arc(R * 0.80, 0, R * 0.42, Math.PI * 0.5, Math.PI * 1.5);
+  ctx.arc(R * 0.80, 0, R * 0.55, Math.PI * 0.5, Math.PI * 1.5);
   ctx.fill();
   // Eyes, looking where the person faces.
   ctx.fillStyle = '#14141c';
   ctx.beginPath();
-  ctx.arc(R * 1.18, -R * 0.16, R * 0.09, 0, TAU);
-  ctx.arc(R * 1.18, R * 0.16, R * 0.09, 0, TAU);
+  ctx.arc(R * 1.28, -R * 0.18, R * 0.10, 0, TAU);
+  ctx.arc(R * 1.28, R * 0.18, R * 0.10, 0, TAU);
   ctx.fill();
   ctx.restore();
   if (isPlayer) {

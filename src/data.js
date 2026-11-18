@@ -59,7 +59,7 @@ export const WEAPONS = [
 ];
 
 export const CARS = [
-  { name: 'FALCON GT', color: '#e84b6a', top: 1.00 },
+  { name: 'MARLIN GT', color: '#e84b6a', top: 1.00 },
   { name: 'HARBOR CRUISER', color: '#4b7de8', top: 0.92 },
   { name: 'SUNSET COUPE', color: '#e8a24b', top: 1.05 },
   { name: 'DOCK RUNNER', color: '#5aa87d', top: 0.95 },
@@ -75,61 +75,70 @@ export const RADIOS = [
   { name: 'PALM FM 102.7', show: 'Salt Air', song: 'Coral Club — Salt Air' },
 ];
 
-// Seven story jobs. A stage is one of: drive (reach the marker), pickup (press
-// E), shoot (drop N of a gang), boss (dialog, then drop the boss + guards),
-// escape (reach the safehouse, then lose the heat), deliver (drive, on a clock),
-// talk (press E at Mara). The mission ends after its last stage.
+// Seven story jobs, all original to Crimson Harbor. A stage is one of: drive
+// (reach the marker), pickup (press E), shoot (drop N of a gang), boss
+// (dialog, then drop the boss + guards), escape (reach the safehouse, then
+// lose the heat), deliver (drive, on a clock), talk (press E at Mara).
+// A stage may carry extra.wanted to raise the heat when it begins.
 function job(id, ch, title, reward, brief, stages) {
   return { id, ch, title, reward, brief, stages: stages.map(([type, x, y, text, next, extra]) => ({ type, x, y, text, next, ...(extra || {}) })) };
 }
 export const MISSIONS = [
-  job(1, 1, 'FIRST LIGHT', 800, 'Mara needs a driver tonight. Pick up her package, then bring it home.', [
-    ['drive', 1050, 450, 'Drive to Mara\'s pickup on Marina Bay', 'Pick up the package'],
-    ['pickup', 1050, 450, 'Press E to take the package', 'Cops are coming — run'],
-    ['escape', 2550, 1950, 'Lose the cops, then reach the safehouse', 'Break line of sight'],
-    ['escape', 2550, 1950, 'Reach the safehouse on Sunset Strip', 'Job done'],
+  // M1 — Leo walks out of Port Valen Penitentiary and the PVPD is already
+  // waiting. No package, no plan: break the cordon and vanish.
+  job(1, 1, 'GATES OPEN', 800, 'Leo walks out of prison and the PVPD is already waiting. No plan — just run.', [
+    ['drive', 450, 450, 'Cut through Old Pier — the cordon is behind you', 'Break the cordon', { wanted: 4 }],
+    ['escape', 2550, 1950, 'Break line of sight, then reach the safehouse', 'Mara is waiting'],
+    ['talk', 1650, 1050, 'Mara is waiting in Harbor View', 'Job done'],
   ]),
-  job(2, 2, 'DOCKSIDE DEBT', 1200, 'The Vipers owe Mara money. Collect it — loudly, on foot.', [
-    ['drive', 450, 1650, 'Drive to the docks in Old Pier', 'Get out and settle it'],
-    ['shoot', 450, 1650, 'Take out the Vipers crew', 'Lose any heat', { count: 6, gang: 'vipers' }],
+  // M2 — on-foot cleanup at the Vipers pit on Sunset Strip.
+  job(2, 2, 'VIPER PIT', 1200, 'The Vipers torched Mara\'s stash on the Strip. Go in on foot and clear the pit.', [
+    ['drive', 750, 2250, 'Drive to the Vipers pit on Sunset Strip', 'Get out and settle it'],
+    ['shoot', 750, 2250, 'Clear the pit — 6 Vipers down', 'Lose any heat', { count: 6, gang: 'vipers' }],
     ['escape', 2550, 1950, 'Lose the heat, then reach the safehouse', 'Report back'],
     ['talk', 1650, 1050, 'Report back to Mara in Harbor View', 'Job done'],
   ]),
-  job(3, 3, 'KING OF THE HARBOR', 2000, 'Big Ray Calloway runs the Harbor Kings. End his run tonight.', [
-    ['drive', 2850, 1950, 'Drive to the Kings warehouse in Portside', 'Face Big Ray'],
-    ['boss', 2850, 1950, 'Take down Big Ray Calloway', 'Lose any heat'],
+  // M3 — boss Big Ray Calloway + his guards at the Kings dock.
+  job(3, 3, 'RAY\'S LAST TIDE', 2000, 'Big Ray Calloway thinks the harbor is his. Prove him wrong — at the Kings\' own dock.', [
+    ['drive', 2850, 1650, 'Drive to the Kings dock in Portside', 'Face Big Ray'],
+    ['boss', 2850, 1650, 'Take down Big Ray Calloway', 'Lose any heat'],
     ['escape', 2550, 1950, 'Lose the heat, then reach the safehouse', 'Report back'],
     ['talk', 1650, 1050, 'Report back to Mara in Harbor View', 'Job done'],
   ]),
-  job(4, 4, 'THE LONG HAUL', 1500, 'A truck full of cargo has to cross the city before dawn. Fast.', [
-    ['drive', 450, 450, 'Drive to the truck in Old Pier', 'Take the wheel'],
-    ['deliver', 2850, 450, 'Haul the cargo to Palm Court — keep it moving', 'Drop it off'],
-    ['deliver', 2850, 1950, 'Deliver the cargo to Portside', 'Lose any heat'],
+  // M4 — sabotage: burn the Kings' pirate radio relay, no cargo, no kills.
+  job(4, 4, 'STATIC BURN', 1500, 'The Harbor Kings run a pirate relay that snitches on every crew in the city. Mara wants it dark.', [
+    ['drive', 1950, 750, 'Drive to the relay tower in Harbor View', 'Plant the charge'],
+    ['pickup', 1950, 750, 'Press E to plant the charge', 'The tower is burning'],
+    ['escape', 2550, 1950, 'Lose the heat, then reach the safehouse', 'Report back'],
+    ['talk', 1650, 1050, 'Report back to Mara in Harbor View', 'Job done'],
+  ]),
+  // M5 — rescue the ferryman from the Docksiders and drive him out.
+  job(5, 5, 'FERRYMAN\'S DUE', 1800, 'A ferryman who owes Mara is being squeezed by the Docksiders on the east pier. Get him out.', [
+    ['drive', 2850, 750, 'Drive to the ferryman on the east pier', 'Get him in the car'],
+    ['pickup', 2850, 750, 'Press E to get the ferryman in the car', 'Drive — they are coming'],
+    ['escape', 2550, 1950, 'Outrun the Docksiders to the safehouse', 'Report back'],
+    ['talk', 1650, 1050, 'Report back to Mara in Harbor View', 'Job done'],
+  ]),
+  // M6 — five of the lantern crew, then the Dockmaster himself.
+  job(6, 6, 'FIVE LANTERNS', 2500, 'The Docksiders light five signal lanterns along the south port to guide their smugglers in. Mara wants them dark.', [
+    ['drive', 2850, 2250, 'Drive to the lanterns at the south port', 'Drop the lantern crew'],
+    ['shoot', 2850, 2250, 'Drop the lantern crew — 5 down', 'The Dockmaster is next', { count: 5, gang: 'docksiders' }],
+    ['boss', 2850, 2250, 'Take down the Dockmaster', 'Lose any heat'],
     ['escape', 2550, 1950, 'Lose the heat, then reach the safehouse', 'Job done'],
   ]),
-  job(5, 5, 'SAFEHOUSE RUN', 1800, 'Mara\'s runner is exposed. Drive him home while the Vipers chase you.', [
-    ['drive', 1650, 450, 'Drive to the runner in Marina Bay', 'Pick him up'],
-    ['pickup', 1650, 450, 'Press E to pick up the runner', 'Drive — they are coming'],
-    ['escape', 2550, 1950, 'Outrun the Vipers to the safehouse', 'Lose any heat'],
-    ['escape', 2550, 1950, 'Reach the safehouse on Sunset Strip', 'Job done'],
-  ]),
-  job(6, 6, 'HARBOR HEIST', 2500, 'The Docksiders guard a shipment at the port. Take it. All of it.', [
-    ['drive', 2850, 1650, 'Drive to the port in Portside', 'Clear the dock'],
-    ['shoot', 2850, 1650, 'Take out the Docksiders crew', 'Grab the shipment', { count: 8, gang: 'docksiders' }],
-    ['pickup', 2850, 1650, 'Press E to grab the shipment', 'Run — cops are coming'],
-    ['escape', 2550, 1950, 'Escape to the safehouse on Sunset Strip', 'Job done'],
-  ]),
-  job(7, 7, 'THE RECKONING', 4000, 'Dario Venn set Leo up four years ago. Tonight Leo collects.', [
-    ['drive', 1650, 1350, 'Drive to Venn\'s tower in Harbor View', 'Go in loud'],
-    ['boss', 1650, 1350, 'Take down Dario Venn and his crew', 'Lose any heat'],
+  // M7 — boss Dario Venn at his Palm Court penthouse.
+  job(7, 7, 'THE MAN WHO SIGNED', 4000, 'Dario Venn signed the paper that put Leo inside four years ago. Tonight, at his own penthouse, Leo makes him unsign it.', [
+    ['drive', 2850, 450, 'Drive to Venn\'s penthouse in Palm Court', 'Go in loud'],
+    ['boss', 2850, 450, 'Take down Dario Venn and his crew', 'Lose any heat'],
     ['escape', 2550, 1950, 'Lose the heat, then reach the safehouse', 'Finish it'],
     ['talk', 1650, 1050, 'Meet Mara one last time', 'Job done'],
   ]),
 ];
 
 export const BOSSES = {
-  3: { name: 'BIG RAY CALLOWAY', role: 'HARBOR KINGS BOSS', line: 'You picked the wrong harbor, kid. Boys — wash him out.', color: '#e8b04b', bg: '#6a5a30', shirt: '#8a6a2a', skin: '#d8a06a', hair: '#4a2a10', shades: false, hat: null, hp: 420, guards: 4 },
-  7: { name: 'DARIO VENN', role: 'THE MAN WHO SET LEO UP', line: 'Four years, and you still come crawling back. Finish him.', color: '#c94f43', bg: '#1f2a3a', shirt: '#2a3a55', skin: '#c98a5e', hair: '#e8e8e8', shades: false, hat: null, hp: 520, guards: 6 },
+  3: { name: 'BIG RAY CALLOWAY', role: 'HARBOR KINGS BOSS', line: 'Four years inside and you still think you\'re a driver? This harbor eats drivers. Boys — feed him to the water.', color: '#e8b04b', bg: '#6a5a30', shirt: '#8a6a2a', skin: '#d8a06a', hair: '#4a2a10', shades: false, hat: null, hp: 420, guards: 4 },
+  6: { name: 'IVAN KROSS', role: 'DOCKMASTER OF THE LANTERNS', line: 'You want my lanterns dark? Then you go dark first. Boys — hold the line.', color: '#5aa8e8', bg: '#1f2a3a', shirt: '#2a4a6a', skin: '#c98a5e', hair: '#3a2a1a', shades: false, hat: '#e8b04b', hp: 380, guards: 2 },
+  7: { name: 'DARIO VENN', role: 'THE MAN WHO SET LEO UP', line: 'You should have stayed in your cell, Marlow. I signed that paper once — I\'ll sign it again.', color: '#c94f43', bg: '#1f2a3a', shirt: '#2a3a55', skin: '#c98a5e', hair: '#e8e8e8', shades: false, hat: null, hp: 520, guards: 6 },
 };
 
 export const MARA = { name: 'MARA VOSS', role: 'FIXER', color: '#e86aa8', bg: '#2a1f3a', shirt: '#7d2a5e', skin: '#e8c49a', hair: '#14100c', shades: false, hat: null };

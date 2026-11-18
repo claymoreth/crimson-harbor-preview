@@ -103,7 +103,6 @@ export function drawHUD(ctx, g) {
     panel(ctx, 16, 14, 390, 108, 0.55);
     text(ctx, 'CH ' + m.ch + '  ' + m.title.toUpperCase(), 28, 40, 17, '#ff7a6a', 'left', 900);
     text(ctx, m.brief, 28, 66, 14, '#fff', 'left', 600);
-    const sub = m.id === 3 ? 'Take out the Harbor Kings crew' : m.brief;
     text(ctx, (s ? s.text : ''), 28, 88, 13, '#ffd24b', 'left', 700);
     // Kill counter on shoot / boss stages — top right of the panel, clear of
     // the STAGE line below.
@@ -145,13 +144,23 @@ export function drawHUD(ctx, g) {
       text(ctx, u.mode, w - 78, y, 11, modeColor, 'left', 900);
     });
   }
-  // Speed, car, radio — bottom right.
-  const sp = p.inCar && p.car ? Math.abs(p.car.speed) * 0.36 : 0;
-  text(ctx, Math.round(sp) + ' KM/H', w - 16, h - 84, 30, '#fff', 'right', 900);
+  // Bottom right — the two modes look NOTHING alike.
   if (p.inCar && p.car) {
+    // MODE NYETIR: speed, car name, condition, radio.
+    const sp = Math.abs(p.car.speed) * 0.36;
+    text(ctx, Math.round(sp) + ' KM/H', w - 16, h - 84, 30, '#fff', 'right', 900);
     text(ctx, (p.car.def.name || 'CAR') + ' · CONDITION ' + Math.round(p.car.cond) + '%', w - 16, h - 58, 13, '#bdb8d6', 'right', 700);
+    text(ctx, 'RADIO  ' + RADIOS[g.radio].name, w - 16, h - 36, 12, '#ff7ad8', 'right', 700);
+  } else {
+    // MODE JALAN KAKI: no speed, no car, no radio — a clear ON FOOT panel
+    // with the weapon and ammo big, and HP.
+    panel(ctx, w - 310, h - 118, 294, 82, 0.72);
+    text(ctx, 'ON FOOT — LEO MARLOW', w - 298, h - 90, 15, '#ffd24b', 'left', 900);
+    const wp = WEAPONS[p.weapon];
+    const ammoTxt = wp.ammo === Infinity ? '∞' : (p.ammo[p.weapon] || 0) + ' / ' + (p.reserve[p.weapon] || 0);
+    text(ctx, wp.name + '   ' + ammoTxt, w - 298, h - 62, 19, '#fff', 'left', 900);
+    text(ctx, 'HP ' + Math.round(p.hp) + ' / ' + p.maxHp + '   ·   F — get back in a car', w - 298, h - 40, 12, '#7ddb8a', 'left', 700);
   }
-  text(ctx, 'RADIO  ' + RADIOS[g.radio].name, w - 16, h - 36, 12, '#ff7ad8', 'right', 700);
   // Weapon slots — bottom left.
   const wx = 16;
   const wy = h - 66;

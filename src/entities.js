@@ -422,45 +422,72 @@ export function drawCar(ctx, car) {
     ctx.fillRect(car.x - 20, car.y - 30, 40 * (car.cond / 100), 5);
   }
 }
+// A person, drawn BIG and unmistakable: a wide torso, shoulders, a head
+// facing the aim direction, and a long gun barrel when aiming. The player
+// is larger still, with a white ring and a LEO label, so on foot the player
+// can never be mistaken for a car.
 export function drawPerson(ctx, x, y, angle, color, isPlayer, aimAngle) {
+  const R = isPlayer ? 17 : 12;
   ctx.save();
   ctx.translate(x, y);
+  // Shadow.
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ctx.beginPath();
-  ctx.ellipse(2, 3, 11, 9, 0, 0, TAU);
+  ctx.ellipse(2, 4, R + 3, R + 1, 0, 0, TAU);
   ctx.fill();
   ctx.rotate(angle);
-  // Gun when aiming.
+  // Gun barrel, long and dark, pointing where the person aims.
   if (aimAngle !== undefined) {
-    ctx.strokeStyle = '#222';
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#14141c';
+    ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.moveTo(8, 0);
-    ctx.lineTo(20, 0);
+    ctx.moveTo(R * 0.4, 0);
+    ctx.lineTo(R + 18, 0);
     ctx.stroke();
+    ctx.fillStyle = '#ffd24b';
+    ctx.fillRect(R + 16, -2, 5, 4);
   }
+  // Torso — a big circle in the shirt colour.
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.arc(0, 0, 10, 0, TAU);
+  ctx.arc(0, 0, R, 0, TAU);
   ctx.fill();
+  // Shoulders, either side of the torso.
+  ctx.beginPath();
+  ctx.arc(0, -R * 0.62, R * 0.42, 0, TAU);
+  ctx.arc(0, R * 0.62, R * 0.42, 0, TAU);
+  ctx.fill();
+  // Belt / jacket stripe across the chest.
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(-R * 0.4, -R * 0.9, R * 0.8, R * 0.28);
+  // Head (skin), pushed forward in the facing direction.
   ctx.fillStyle = '#e8b98a';
   ctx.beginPath();
-  ctx.arc(4, 0, 5.5, 0, TAU);
+  ctx.arc(R * 0.48, 0, R * 0.44, 0, TAU);
   ctx.fill();
-  ctx.fillStyle = '#222';
+  // Hair cap on the back of the head.
+  ctx.fillStyle = '#2b2118';
   ctx.beginPath();
-  ctx.arc(6, -2, 1.6, 0, TAU);
+  ctx.arc(R * 0.30, 0, R * 0.44, Math.PI * 0.5, Math.PI * 1.5);
   ctx.fill();
+  // Eyes, looking where the person faces.
+  ctx.fillStyle = '#14141c';
   ctx.beginPath();
-  ctx.arc(6, 2, 1.6, 0, TAU);
+  ctx.arc(R * 0.72, -R * 0.16, R * 0.09, 0, TAU);
+  ctx.arc(R * 0.72, R * 0.16, R * 0.09, 0, TAU);
   ctx.fill();
   ctx.restore();
   if (isPlayer) {
+    // White ring + name label: this is a person on foot, never a car.
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(x, y, 14, 0, TAU);
+    ctx.arc(x, y, R + 7, 0, TAU);
     ctx.stroke();
+    ctx.fillStyle = '#ffd24b';
+    ctx.font = '900 12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('LEO', x, y - R - 14);
   }
 }
 export function drawEnemy(ctx, e) {

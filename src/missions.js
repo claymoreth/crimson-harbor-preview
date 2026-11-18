@@ -44,6 +44,11 @@ export class MissionManager {
     if (!s) return;
     g.objective = { x: s.x, y: s.y };
     this.timer = s.type === 'deliver' ? 150 : 0;
+    // A stage may raise the heat when it begins (M1 opens at wanted 4).
+    if (s.wanted !== undefined) {
+      g.wanted = Math.max(g.wanted, s.wanted);
+      g.spawnPolice();
+    }
     if (s.type === 'shoot') {
       this.kills = 0;
       this.killsNeed = s.count;

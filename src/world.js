@@ -223,23 +223,27 @@ export function drawWorld(ctx, cam, game) {
   }
 }
 
-// ---- minimap (circular) ----------------------------------------------------
+// ---- minimap (circular, FIXED whole-city view) ---------------------------
+// The map itself NEVER moves, pans, or rotates: the entire city (3600x2700)
+// is drawn once, in fixed screen coordinates, inside the circle. Only the
+// player arrow (position + heading) and the markers / dots move. That is
+// what keeps the minimap dead still while the car turns.
 export function drawMinimap(ctx, cx, cy, r, game, opts = {}) {
-  const scale = (r * 2) / 900;
+  const scale = (r * 2) / WORLD_W;
+  // Fixed origin: the whole city is centred in the circle, independent of
+  // where the player is. Nothing here depends on the player position.
+  const ox = cx - (WORLD_W * scale) / 2;
+  const oy = cy - (WORLD_H * scale) / 2;
   ctx.save();
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.clip();
-  const px = game.player.x;
-  const py = game.player.y;
-  const ox = cx - px * scale;
-  const oy = cy - py * scale;
-  // water + ground
+  // water + ground (land is x < 3300, y < 2400)
   ctx.fillStyle = '#2a7da8';
   ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
   ctx.fillStyle = '#5a6a52';
-  ctx.fillRect(ox, oy, WORLD_W * scale, 2400 * scale);
-  // roads
+  ctx.fillRect(ox, oy, 3300 * scale, 2400 * scale);
+  // roads (fixed positions, same as the world)
   ctx.fillStyle = '#3a3f4a';
   for (let k = 0; k <= 11; k++) ctx.fillRect(ox + (150 + k * ROAD_STEP) * scale - 2, oy, 4, 2400 * scale);
   for (let k = 0; k <= 8; k++) ctx.fillRect(ox, oy + (150 + k * ROAD_STEP) * scale - 2, 3300 * scale, 4);
@@ -275,12 +279,14 @@ export function drawMinimap(ctx, cx, cy, r, game, opts = {}) {
     ctx.arc(ox + p.x * scale, oy + p.y * scale, 3, 0, Math.PI * 2);
     ctx.fill();
   }
-  // GPS route to objective
+  // GPS route from the player to the objective (both move; the map does not)
+  const pwx = ox + game.player.x * scale;
+  const pwy = oy + game.player.y * scale;
   if (game.objective) {
     ctx.strokeStyle = '#ffd24b';
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.moveTo(cx, cy);
+    ctx.moveTo(pwx, pwy);
     ctx.lineTo(ox + game.objective.x * scale, oy + game.objective.y * scale);
     ctx.stroke();
     ctx.fillStyle = '#ffd24b';
@@ -288,9 +294,10 @@ export function drawMinimap(ctx, cx, cy, r, game, opts = {}) {
     ctx.arc(ox + game.objective.x * scale, oy + game.objective.y * scale, 5, 0, Math.PI * 2);
     ctx.fill();
   }
-  // player arrow
+  // player arrow — the ONLY map element that rotates; its position follows
+  // the player, its heading follows the car / the player's aim.
   ctx.save();
-  ctx.translate(cx, cy);
+  ctx.translate(pwx, pwy);
   ctx.rotate(game.player.angle);
   ctx.fillStyle = '#fff';
   ctx.beginPath();

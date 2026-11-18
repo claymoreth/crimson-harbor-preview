@@ -46,6 +46,9 @@ export class Game {
     this.enemies = [];
     this.police = [];
     this.traffic = makeTraffic(14);
+    // Cars the player left behind on foot (F exit / dead car) — they stay in
+    // the world and can be re-entered with F.
+    this.parkedCars = [];
     this.peds = makePeds(18);
     this.collectibles = this.makeCollectibles();
     this.player = makePlayer(1650, 1050, this.charSel);
@@ -63,8 +66,13 @@ export class Game {
     this.mapMarkers = [];
     this.updateMarkers();
     this.setupShot();
+    this.snapCam();
   }
 
+  snapCam() {
+    this.cam.x = clamp(this.player.x - W / 2, 0, WORLD_W - W);
+    this.cam.y = clamp(this.player.y - H / 2, 0, WORLD_H - H);
+  }
   makeCollectibles() {
     const list = [];
     let seed = 7;
@@ -96,14 +104,15 @@ export class Game {
     if (shot === 'chase') {
       this.newGame(true);
       this.missions.start(MISSIONS[0]);
-      this.missions.stageIdx = 2;
+      // New M1 "GATES OPEN": stage 1 is the escape (break the cordon).
+      this.missions.stageIdx = 1;
       this.missions.enterStage();
       this.wanted = 4;
       this.hiddenT = 12;
       this.cash = 2450;
       this.hour = 18.8;
       // On the long north-south road, facing north, already at speed.
-      this.player.car = makeCar(1650, 1800, -Math.PI / 2, { name: 'FALCON GT', color: '#e84b6a', top: 1.0 });
+      this.player.car = makeCar(1650, 1800, -Math.PI / 2, { name: 'MARLIN GT', color: '#e84b6a', top: 1.0 });
       this.player.car.speed = 380;
       this.player.inCar = true;
       this.player.x = 1650;
@@ -145,11 +154,14 @@ export class Game {
       this.hour = 22.2;
       this.day = 1;
       this.missions.start(MISSIONS[2]);
+      // New M3 "RAY'S LAST TIDE": stage 1 is the boss (Big Ray + guards).
       this.missions.stageIdx = 1;
       this.missions.enterStage();
       this.wanted = 2;
+      // Stand just west of the Kings dock so Big Ray and his guards are in
+      // frame, on foot, SMG out.
       this.player.x = 2700;
-      this.player.y = 1950;
+      this.player.y = 1650;
       this.player.angle = 0;
       this.player.inCar = false;
       this.player.car = null;
@@ -198,14 +210,16 @@ export class Game {
     this.hiddenT = 8;
     this.player = makePlayer(1650, 1050, this.charSel);
     giveWeapons(this.player, this.save.weapons);
-    this.player.car = makeCar(1650, 1120, -Math.PI / 2, { name: 'FALCON GT', color: '#e84b6a', top: 1.0 });
+    this.player.car = makeCar(1650, 1120, -Math.PI / 2, { name: 'MARLIN GT', color: '#e84b6a', top: 1.0 });
     this.player.inCar = true;
     this.player.x = 1650;
     this.player.y = 1120;
     this.enemies = [];
     this.police = [];
+    this.parkedCars = [];
     this.missions.start(MISSIONS[0]);
     this.state = 'playing';
+    this.snapCam();
     if (!silent) sfx.mission();
   }
   continueGame() {
@@ -218,16 +232,18 @@ export class Game {
     this.respectLevel = s.respectLevel;
     this.player = makePlayer(1650, 1050, this.charSel);
     giveWeapons(this.player, s.weapons);
-    this.player.car = makeCar(1650, 1120, -Math.PI / 2, { name: 'FALCON GT', color: '#e84b6a', top: 1.0 });
+    this.player.car = makeCar(1650, 1120, -Math.PI / 2, { name: 'MARLIN GT', color: '#e84b6a', top: 1.0 });
     this.player.inCar = true;
     this.player.x = 1650;
     this.player.y = 1120;
     this.enemies = [];
     this.police = [];
+    this.parkedCars = [];
     this.wanted = 0;
     const m = MISSIONS[Math.min(s.chapter, 7) - 1];
     this.missions.start(m);
     this.state = 'playing';
+    this.snapCam();
   }
   saveProgress() {
     this.save.chapter = Math.min(7, this.save.chapter);
@@ -394,31 +410,40 @@ export class Game {
         p.inCar = false;
         p.x = p.car.x + 30;
         p.y = p.car.y;
+        p.car.speed = 0;
+        this.parkedCars.push(p.car);
         p.car = null;
         this.showDialog('MARA VOSS', 'FIXER', 'Your car is dead, Leo. Steal another one.', 4);
       }
-      // Car vs traffic shove.
-      for (const t of this.traffic) {
-        if (dist(p.car.x, p.car.y, t.x, t.y) < 42) {
-          const a = angTo(t.x, t.y, p.car.x, p.car.y);
-          moveCircle(p.car, Math.cos(a) * 30 * dt * 10, Math.sin(a) * 30 * dt * 10, 20);
-          p.car.speed *= 0.92;
-          t.speed *= 0.9;
+      // Car vs traffic / peds — only while still in a car. The block above
+      // may have destroyed the car and set p.car = null; without this guard
+      // the loops below read p.car.x on a null car (TypeError, main.js:420).
+      if (p.car) {
+        // Car vs traffic shove.
+        for (const t of this.traffic) {
+          if (dist(p.car.x, p.car.y, t.x, t.y) < 42) {
+            const a = angTo(t.x, t.y, p.car.x, p.car.y);
+            moveCircle(p.car, Math.cos(a) * 30 * dt * 10, Math.sin(a) * 30 * dt * 10, 20);
+            p.car.speed *= 0.92;
+            t.speed *= 0.9;
+          }
         }
-      }
-      // Peds hit by the car.
-      for (const ped of this.peds) {
-        if (Math.abs(p.car.speed) > 150 && dist(p.car.x, p.car.y, ped.x, ped.y) < 26) {
-          ped.x = -9999;
-          ped.y = -9999;
-          this.wanted = Math.min(5, this.wanted + 1);
-          this.spawnPolice();
-          floaters.push({ x: p.car.x, y: p.car.y - 30, text: 'PEDESTRIAN HIT — WANTED UP', life: 1.4, color: '#ff5a4b' });
-          sfx.crash();
+        // Peds hit by the car.
+        for (const ped of this.peds) {
+          if (Math.abs(p.car.speed) > 150 && dist(p.car.x, p.car.y, ped.x, ped.y) < 26) {
+            ped.x = -9999;
+            ped.y = -9999;
+            this.wanted = Math.min(5, this.wanted + 1);
+            this.spawnPolice();
+            floaters.push({ x: p.car.x, y: p.car.y - 30, text: 'PEDESTRIAN HIT — WANTED UP', life: 1.4, color: '#ff5a4b' });
+            sfx.crash();
+          }
         }
       }
     } else {
-      // On foot.
+      // On foot. Shooting lives ONLY in this branch — while inCar the
+      // driving branch above runs instead, so a mouse click in the car can
+      // never fire a bullet. Shoot stages must be played on foot.
       const sp = (keys['Shift'] ? 300 : 185) * CHARACTERS[p.charIndex].sprint;
       const mx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
       const my = (input.down ? 1 : 0) - (input.up ? 1 : 0);
@@ -489,44 +514,64 @@ export class Game {
         return;
       }
     }
-    // F: enter / exit car.
+    // F: enter / exit car. Exiting PARKS the car in place (it stays in the
+    // world and can be re-entered); entering takes the nearest parked car
+    // first, else steals a nearby traffic car.
     if (this.fPressed) {
       if (p.inCar) {
         p.inCar = false;
         p.x = p.car.x + Math.cos(p.car.angle + Math.PI / 2) * 30;
         p.y = p.car.y + Math.sin(p.car.angle + Math.PI / 2) * 30;
+        p.car.speed = 0;
+        this.parkedCars.push(p.car);
         p.car = null;
       } else {
+        // Nearest parked car first (the one the player left behind).
         let best = null;
         let bd = 70;
-        for (const t of this.traffic) {
-          const d = dist(p.x, p.y, t.x, t.y);
+        for (const c of this.parkedCars) {
+          const d = dist(p.x, p.y, c.x, c.y);
           if (d < bd) {
             bd = d;
-            best = t;
+            best = c;
           }
         }
         if (best) {
-          const idx = this.traffic.indexOf(best);
-          this.traffic.splice(idx, 1);
+          const idx = this.parkedCars.indexOf(best);
+          this.parkedCars.splice(idx, 1);
           p.car = best;
           p.car.cond = Math.max(p.car.cond, 40);
           p.inCar = true;
           p.x = best.x;
           p.y = best.y;
-          this.wanted = Math.min(5, this.wanted + 1);
-          this.spawnPolice();
-          floaters.push({ x: p.x, y: p.y - 30, text: 'CAR STOLEN — WANTED UP', life: 1.4, color: '#ff5a4b' });
           sfx.horn();
-        } else if (this.nearCar) {
-          p.car = this.nearCar;
-          p.inCar = true;
-          p.x = this.nearCar.x;
-          p.y = this.nearCar.y;
+        } else {
+          // Steal a nearby traffic car.
+          let tbest = null;
+          let tbd = 70;
+          for (const t of this.traffic) {
+            const d = dist(p.x, p.y, t.x, t.y);
+            if (d < tbd) {
+              tbd = d;
+              tbest = t;
+            }
+          }
+          if (tbest) {
+            const idx = this.traffic.indexOf(tbest);
+            this.traffic.splice(idx, 1);
+            p.car = tbest;
+            p.car.cond = Math.max(p.car.cond, 40);
+            p.inCar = true;
+            p.x = tbest.x;
+            p.y = tbest.y;
+            this.wanted = Math.min(5, this.wanted + 1);
+            this.spawnPolice();
+            floaters.push({ x: p.x, y: p.y - 30, text: 'CAR STOLEN — WANTED UP', life: 1.4, color: '#ff5a4b' });
+            sfx.horn();
+          }
         }
       }
     }
-    this.nearCar = null;
     // R: reload.
     if (this.rPressed && !p.inCar) {
       const w = WEAPONS[p.weapon];
@@ -613,9 +658,13 @@ export class Game {
     this.missions.update(dt);
     // GPS distance.
     if (this.objective) this.gpsDist = dist(p.x, p.y, this.objective.x, this.objective.y);
-    // Camera follows the player, clamped to the world.
-    this.cam.x = clamp(p.x - W / 2, 0, WORLD_W - W);
-    this.cam.y = clamp(p.y - H / 2, 0, WORLD_H - H);
+    // Camera follows the player with a smooth lerp (never rotates, never
+    // snaps) — turning fast no longer makes the view jump or jitter.
+    const tx = clamp(p.x - W / 2, 0, WORLD_W - W);
+    const ty = clamp(p.y - H / 2, 0, WORLD_H - H);
+    const k = Math.min(1, dt * 6);
+    this.cam.x += (tx - this.cam.x) * k;
+    this.cam.y += (ty - this.cam.y) * k;
     // Audio.
     setSiren(this.wanted > 0);
     setEngine(p.inCar ? Math.abs(p.car.speed) / 520 : 0, p.inCar);
@@ -775,6 +824,11 @@ export class Game {
     for (const t of this.traffic) {
       if (t.x < cam.x - 60 || t.x > cam.x + W + 60 || t.y < cam.y - 60 || t.y > cam.y + H + 60) continue;
       drawCar(ctx, t);
+    }
+    // Parked cars (left behind when the player got out on foot).
+    for (const c of this.parkedCars) {
+      if (c.x < cam.x - 60 || c.x > cam.x + W + 60 || c.y < cam.y - 60 || c.y > cam.y + H + 60) continue;
+      drawCar(ctx, c);
     }
     // Police.
     for (const c of this.police) {

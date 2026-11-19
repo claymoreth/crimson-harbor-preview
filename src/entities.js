@@ -186,9 +186,160 @@ export function makePolice(n, player, startIdx = 0) {
     const y = clamp(player.y + Math.sin(a) * 700, 100, WORLD_H - 100);
     const car = makeCar(x, y, angTo(x, y, player.x, player.y), { name: 'PVPD INTERCEPTOR', color: '#1f2a44', top: 1.02 }, true, POLICE_NAMES[(startIdx + i) % POLICE_NAMES.length]);
     car.mode = 'PURSUIT';
+    car.recoverT = 0; // stuck-recovery timer (Fix 6)
+    car.detourSide = 0; // +1/-1: which side to route around a building (Fix 6)
+    car.detour = null; // active detour waypoint {x, y} (Fix 6)
+    car.route = null; // road-grid route waypoints [{x, y}] (Fix 6)
+    car.routeCell = null; // target grid cell the route was built for (Fix 6)
+    car.recoverWant = 0; // aim angle the stuck recovery steers toward (Fix 6)
     list.push(car);
   }
   return list;
+}
+// Police navigation (Fix 6): the road grid is guaranteed clear of buildings
+// (roads run at 150 + 300k, buildings sit strictly inside the blocks
+// between them), so a police car that cannot see the player drives to the
+// road grid and follows intersections around the block instead of grinding
+// into a wall. BFS over the 11 x 8 intersection grid gives the route.
+function lineBlockedWide(c, tx, ty) {
+  // A 2px probe reads "clear" for a line that grazes a building corner, but
+  // the 20px-radius car cannot fit through it. Check the direct line plus
+  // two parallels offset by the car's radius on both sides.
+  if (lineBlocked(c.x, c.y, tx, ty)) return true;
+  const dx = tx - c.x, dy = ty - c.y;
+  const dd = Math.hypot(dx, dy) || 1;
+  const nx = -dy / dd * 32, ny = dx / dd * 32;
+  if (lineBlocked(c.x + nx, c.y + ny, tx + nx, ty + ny)) return true;
+  if (lineBlocked(c.x - nx, c.y - ny, tx - nx, ty - ny)) return true;
+  return false;
+}
+// Road-grid helpers (Fix 6): intersections at (150 + 300i, 150 + 300j),
+// usable i = 0..10 (x <= 3150, east of that is water), j = 0..7 (y <= 2250).
+const GRID_I = 11;
+const GRID_J = 8;
+function gridX(i) { return 150 + 300 * i; }
+function gridY(j) { return 150 + 300 * j; }
+function nearestGrid(x, y) {
+  return {
+    i: clamp(Math.round((x - 150) / 300), 0, GRID_I - 1),
+    j: clamp(Math.round((y - 150) / 300), 0, GRID_J - 1),
+  };
+}
+// Nearest point on a road centreline: the closer of the vertical-road point
+// (rx, y) and the horizontal-road point (x, ry). Prefer the one whose line
+// from the car is clear, so the car does not drive into a wall just to
+// reach the road.
+function nearestRoadPoint(c) {
+  const g = nearestGrid(c.x, c.y);
+  const rx = gridX(g.i), ry = gridY(g.j);
+  const vert = { x: rx, y: c.y };
+  const horiz = { x: c.x, y: ry };
+  const first = Math.abs(c.x - rx) <= Math.abs(c.y - ry) ? vert : horiz;
+  const second = first === vert ? horiz : vert;
+  if (!lineBlockedWide(c, first.x, first.y)) return first;
+  return second;
+}
+// BFS over the intersection grid. Returns the full intersection list
+// INCLUDING the start — the car must drive to its nearest intersection
+// along the road first. Every leg runs along a road, so it is clear.
+function gridPath(fi, fj, ti, tj) {
+  if (fi === ti && fj === tj) return [{ i: fi, j: fj }];
+  const key = (i, j) => j * GRID_I + i;
+  const prev = new Map([[key(fi, fj), null]]);
+  const queue = [{ i: fi, j: fj }];
+  while (queue.length) {
+    const cur = queue.shift();
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const ni = cur.i + di, nj = cur.j + dj;
+      if (ni < 0 || ni >= GRID_I || nj < 0 || nj >= GRID_J) continue;
+      const k = key(ni, nj);
+      if (prev.has(k)) continue;
+      prev.set(k, key(cur.i, cur.j));
+      if (ni === ti && nj === tj) {
+        const path = [{ i: ti, j: tj }];
+        let pk = k;
+        while (prev.get(pk) !== null) {
+          pk = prev.get(pk);
+          path.unshift({ i: pk % GRID_I, j: Math.floor(pk / GRID_I) });
+        }
+        return path;
+      }
+      queue.push({ i: ni, j: nj });
+    }
+  }
+  return null;
+}
+// Full route to (tx, ty): nearest road point first (get ON a road), then
+// the BFS intersections, then the target itself as the final waypoint.
+function buildRoute(c, tx, ty) {
+  const from = nearestGrid(c.x, c.y);
+  const to = nearestGrid(tx, ty);
+  const path = gridPath(from.i, from.j, to.i, to.j);
+  if (!path) return null;
+  const pts = [nearestRoadPoint(c)];
+  for (const n of path) pts.push({ x: gridX(n.i), y: gridY(n.j) });
+  pts.push({ x: tx, y: ty });
+  return pts;
+}
+// Last-mile detour (Fix 6): when the car and the target share one grid cell,
+// aim at a point offset sideways from the target so the car drives AROUND
+// the building corner instead of grinding into its wall. Tries the
+// previously used side first, then the other side, with increasing offsets.
+// Returns the offset point + side, or null when no clear offset exists.
+function probeDetour(c, tx, ty) {
+  const dx = tx - c.x, dy = ty - c.y;
+  const dd = Math.hypot(dx, dy) || 1;
+  const ux = dx / dd, uy = dy / dd;
+  const nx = -uy, ny = ux; // perpendicular; +1 = clockwise side of the target dir
+  const sides = c.detourSide ? [c.detourSide, -c.detourSide] : [1, -1];
+  for (const s of sides) {
+    for (const off of [170, 280, 400]) {
+      // Clamped to dry land (water starts at x >= 3300, y >= 2400).
+      const ox = clamp(tx + nx * s * off, 40, 3290);
+      const oy = clamp(ty + ny * s * off, 40, 2390);
+      // Both legs must be clear for the 20px-radius car: car -> offset
+      // point (wide check) AND offset point -> target (so the point is not
+      // inside/behind another building).
+      if (!lineBlockedWide(c, ox, oy) && !lineBlocked(ox, oy, tx, ty)) {
+        return { side: s, x: ox, y: oy };
+      }
+    }
+  }
+  return null;
+}
+// Aim angle toward (tx, ty), routing around buildings. Priority: (1) a
+// persistent detour waypoint for the last mile, kept until the car reaches
+// it or the direct line opens up; (2) straight at the target when the wide
+// line check is clear; (3) a last-mile offset detour when car and target
+// share one grid cell; (4) the road-grid route otherwise (rebuilt when the
+// target moves into another grid cell, or when the route runs out).
+function aimAngle(c, tx, ty) {
+  if (c.detour) {
+    if (dist(c.x, c.y, c.detour.x, c.detour.y) < 60 || !lineBlockedWide(c, tx, ty)) c.detour = null;
+    else return angTo(c.x, c.y, c.detour.x, c.detour.y);
+  }
+  if (!lineBlockedWide(c, tx, ty)) {
+    c.route = null;
+    return angTo(c.x, c.y, tx, ty);
+  }
+  const pg = nearestGrid(c.x, c.y);
+  const tg = nearestGrid(tx, ty);
+  if (pg.i === tg.i && pg.j === tg.j) {
+    const det = probeDetour(c, tx, ty);
+    if (det) { c.detourSide = det.side; c.detour = { x: det.x, y: det.y }; return angTo(c.x, c.y, det.x, det.y); }
+  }
+  if (!c.route || !c.route.length || !c.routeCell || c.routeCell.i !== tg.i || c.routeCell.j !== tg.j) {
+    c.route = buildRoute(c, tx, ty);
+    c.routeCell = { i: tg.i, j: tg.j };
+  }
+  if (c.route && c.route.length) {
+    if (dist(c.x, c.y, c.route[0].x, c.route[0].y) < 45) {
+      c.route.shift();
+      if (!c.route.length) { c.route = null; return angTo(c.x, c.y, tx, ty); }
+    }
+    return angTo(c.x, c.y, c.route[0].x, c.route[0].y);
+  }
+  return angTo(c.x, c.y, tx, ty);
 }
 export function updatePolice(list, dt, game) {
   const p = game.player;
@@ -203,21 +354,102 @@ export function updatePolice(list, dt, game) {
     else if (c.mode === 'ROADBLOCK' && d < 260) c.mode = 'PURSUIT';
     else if (c.mode !== 'ROADBLOCK') c.mode = 'PURSUIT';
     let input;
-    if (c.mode === 'ROADBLOCK') {
+    // Stuck recovery: reverse out of the wall for ~1.2s while steering the
+    // nose toward the recovery target (see the steering swap below, which
+    // makes reverse steering rotate the nose the right way). Backing out
+    // already pointing along the road beats backing straight out and then
+    // having to turn the nose at low speed, where the car can barely steer.
+    if (c.recoverT > 0) {
+      c.recoverT -= dt;
+      // Reverse while steering the nose toward the recovery target (the
+      // route waypoint / player). The steering swap below flips left/right
+      // while the car rolls backward, so the nose rotates TOWARD the target
+      // instead of away from it — the car backs out of the wall already
+      // pointing along the road.
+      const rWant = c.recoverWant !== undefined ? c.recoverWant : angTo(c.x, c.y, px, py);
+      const rDiff = angDiff(c.angle, rWant);
+      input = { up: false, down: true, left: rDiff < -0.1, right: rDiff > 0.1, drift: Math.abs(rDiff) > 0.5 };
+      if (c.recoverT <= 0) { c.stuckT = 0; c.stuckX = c.x; c.stuckY = c.y; }
+    } else if (c.stuckT > 0.8) {
+      c.recoverT = 1.2;
+      c.stuckT = 0;
+      // Zero the speed first: leftover forward momentum would make the
+      // reverse steering turn the nose the WRONG way for the first frames.
+      c.speed = 0;
+      const det = probeDetour(c, px, py);
+      c.detourSide = det ? det.side : (c.detourSide ? -c.detourSide : 1);
+      // Aim the recovery at where the car needs to go next (the player),
+      // so the reverse swing points it along the road. Use the DIRECT
+      // angle, not aimAngle: aimAngle rebuilds the route as a side effect,
+      // and rebuilding it for the PLAYER here would clobber the route the
+      // ROADBLOCK branch is following (its target is 260px ahead of the
+      // player, not the player itself) — the car would chase a route whose
+      // destination flip-flops every recovery.
+      c.recoverWant = angTo(c.x, c.y, px, py);
+      input = { up: false, down: true, left: false, right: false, drift: false };
+    } else if (c.mode === 'ROADBLOCK') {
       // Park ahead of the player, across the road.
       const tx = px + Math.cos(p.angle || 0) * 260;
       const ty = py + Math.sin(p.angle || 0) * 260;
-      const want = angTo(c.x, c.y, tx, ty);
+      const want = aimAngle(c, tx, ty);
       const diff = angDiff(c.angle, want);
-      input = { up: d > 60, down: false, left: diff < -0.15, right: diff > 0.15, drift: false };
+      input = { up: d > 60, down: false, left: diff < -0.15, right: diff > 0.15, drift: Math.abs(diff) > 0.5 };
       if (dist(c.x, c.y, tx, ty) < 70) input.up = false;
     } else {
-      const want = angTo(c.x, c.y, px, py);
+      // PURSUIT and RAMMING: chase the player. PURSUIT routes around
+      // buildings; RAMMING aims straight (it is already adjacent) and drops
+      // any stale detour waypoint — but if the straight line is blocked
+      // (e.g. a building corner clips the car's circle), route around it
+      // instead of grinding the wall; keep the route so it is not rebuilt
+      // every frame.
+      if (c.mode === 'RAMMING') c.detour = null;
+      const want = c.mode === 'PURSUIT' || lineBlockedWide(c, px, py) ? aimAngle(c, px, py) : angTo(c.x, c.y, px, py);
       const diff = angDiff(c.angle, want);
-      input = { up: true, down: false, left: diff < -0.1, right: diff > 0.1, drift: false };
+      // On foot, the police pulls up instead of blasting past: cap the
+      // approach speed by distance, and brake to a stop right beside the
+      // player so the bust timer (2.5s within 34px) can actually run — at
+      // 550px/s the car blew past and its wide U-turn threw it into walls.
+      // The player can still run away during those 2.5s. In a car, ram at
+      // full speed as before.
+      let up = true, down = false;
+      if (!p.inCar) {
+        if (d < 30) { up = false; down = c.speed > 0; }
+        else {
+          const cap = d < 60 ? 90 : d < 130 ? 170 : d < 260 ? 300 : Infinity;
+          up = c.speed < cap;
+          // Brake (not just coast) down to the approach cap: coasting
+          // from 300 takes ~340px to reach 90, so the car would blow past
+          // the player before the pull-up stop can engage.
+          down = c.speed > cap + 40;
+        }
+      }
+      // Drift on sharp turns: the only way to tighten the turn radius
+      // (115px at full steer -> ~61px), so U-turns fit between buildings.
+      // But NOT when already close to an on-foot player: a 61px turn radius
+      // at 60px distance is a stable orbit that never closes in. Without
+      // drift the car spirals inward, pulls up beside the player and busts.
+      const closeFoot = !p.inCar && d < 90;
+      input = { up, down, left: diff < -0.1, right: diff > 0.1, drift: !closeFoot && Math.abs(diff) > 0.5 };
     }
+    // When the car rolls backward, driveCar flips the steering sense
+    // (dir = -1): a "left" input rotates the nose the other way. The AI
+    // always thinks in "rotate the nose toward the target" terms, so swap
+    // left/right while reversing — this covers the reverse-to-forward
+    // transition after a recovery, when the car is still rolling backward
+    // but already driving forward.
+    if (c.speed < 0) { const t = input.left; input.left = input.right; input.right = t; }
     const topMul = game.wanted >= 4 ? 1.06 : game.wanted >= 3 ? 1.0 : 0.94;
     driveCar(c, input, dt, topMul);
+    // Stuck detection: commanded forward but barely moved. Anchor = position
+    // at the start of the current window; if the car moves >25px the window
+    // resets, otherwise stuckT grows. Uses the pre-existing stuckT field.
+    if (input.up) {
+      if (c.stuckX === undefined) { c.stuckX = c.x; c.stuckY = c.y; c.stuckT = 0; }
+      if (dist(c.x, c.y, c.stuckX, c.stuckY) > 25) { c.stuckX = c.x; c.stuckY = c.y; c.stuckT = 0; }
+      else c.stuckT += dt;
+    } else {
+      c.stuckT = 0; c.stuckX = c.x; c.stuckY = c.y;
+    }
     // Ram: when touching the player's car, damage + shove.
     if (p.inCar && d < 52 && c.ramCd <= 0) {
       c.ramCd = 0.8;
@@ -229,13 +461,16 @@ export function updatePolice(list, dt, game) {
       game.shake = 0.35;
     }
     c.ramCd -= dt;
-    // Busted: on foot, police touching the player for a while.
-    if (!p.inCar && d < 34) {
-      p.bustT += dt;
-      if (p.bustT > 2.5) game.busted();
-    } else {
-      p.bustT = Math.max(0, p.bustT - dt * 2);
-    }
+  }
+  // Busted: on foot, a police car touching the player for a while. Checked
+  // ONCE per frame, not per car: with several cars, the far ones' decay
+  // cancelled the near one's accumulation every frame, so a parked cop
+  // beside the player never busted them.
+  if (!p.inCar && list.some(c => dist(c.x, c.y, px, py) < 34)) {
+    p.bustT += dt;
+    if (p.bustT > 2.5) game.busted();
+  } else {
+    p.bustT = Math.max(0, p.bustT - dt * 2);
   }
 }
 

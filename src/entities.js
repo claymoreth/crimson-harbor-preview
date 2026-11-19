@@ -381,45 +381,126 @@ export function drawCar(ctx, car) {
   ctx.fillStyle = 'rgba(0,0,0,0.30)';
   ctx.fillRect(-20, -11, 44, 26);
   if (car.isPolice) {
-    // Classic black-and-white police car (Mana, 19 Nov: the old one — plain
-    // white + a red stripe down the middle + a dark block — looked wrong).
-    // Real black-and-whites: black hood + trunk, white doors, dark glass,
-    // a red/blue light bar on the roof centre, headlights + taillights.
-    // NO red stripe down the middle. Rotated frame: +x = front.
-    // White doors (middle of the body).
-    ctx.fillStyle = '#e8e8f0';
-    ctx.fillRect(-22, -13, 44, 26);
-    // Hood (front) and trunk (rear) in black.
+    // Fix 5 (Mana, 19 Nov: "jangan kaya kotak doang di kasih sirine") — the
+    // Fix 4 car was still a plain 44x26 RECT with a light bar on top: a box,
+    // not a car. This redraws it as a REAL top-down car: a shaped silhouette
+    // (rounded corners, tapered nose, mid widest), a distinct cabin with
+    // glass, mirrors, proper tyres with hubs, bumpers, lamps, grille.
+    // Black-and-white livery is kept (black hood + trunk, white doors).
+    // Rotated frame: +x = front. Wheels are drawn here too (the shared
+    // wheel rects below are gated off for police cars).
+    const rr = (x, y, w, h, r) => {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    };
+    // --- Body silhouette: rounded corners, tapered nose, mid widest. ---
+    ctx.beginPath();
+    ctx.moveTo(16, -10);
+    ctx.quadraticCurveTo(22, -10, 22, -5);   // nose top corner
+    ctx.lineTo(22, 5);
+    ctx.quadraticCurveTo(22, 10, 16, 10);    // nose bottom corner
+    ctx.lineTo(6, 12.5);
+    ctx.lineTo(-14, 12.5);
+    ctx.quadraticCurveTo(-21, 12.5, -21, 6); // rear bottom corner
+    ctx.lineTo(-21, -6);
+    ctx.quadraticCurveTo(-21, -12.5, -14, -12.5);
+    ctx.lineTo(6, -12.5);
+    ctx.closePath();
+    ctx.fillStyle = '#e8e8f0';               // white doors = base
+    ctx.fill();
+    // Hood (front) + trunk (rear) in black, clipped to the silhouette so
+    // the black follows the rounded shape instead of a rectangle.
+    ctx.save();
+    ctx.clip();
     ctx.fillStyle = '#101018';
-    ctx.fillRect(12, -13, 10, 26);
-    ctx.fillRect(-22, -13, 10, 26);
-    // Windshields: dark glass, front (just behind the hood) + rear (just
-    // ahead of the trunk).
+    ctx.fillRect(11, -14, 12, 28);
+    ctx.fillRect(-23, -14, 12, 28);
+    // Soft shading along one side so the body reads 3D, not flat.
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.fillRect(-23, 9, 46, 4);
+    ctx.restore();
+    // Body outline so the silhouette edge reads against the road.
+    ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // --- Cabin: windshield + rear window (dark glass trapezoids) + roof. ---
     ctx.fillStyle = '#16202e';
-    ctx.fillRect(8, -11, 4, 22);
-    ctx.fillRect(-12, -11, 4, 22);
-    // Door seam across the white middle so the doors read as doors.
-    ctx.fillStyle = 'rgba(0,0,0,0.28)';
-    ctx.fillRect(0, -12, 1, 24);
-    // Headlights (front corners, pale yellow) + taillights (rear corners).
-    ctx.fillStyle = '#ffe9a8';
-    ctx.fillRect(20, -11, 2, 4);
-    ctx.fillRect(20, 7, 2, 4);
-    ctx.fillStyle = '#c22a2a';
-    ctx.fillRect(-22, -11, 2, 4);
-    ctx.fillRect(-22, 7, 2, 4);
-    // Grille between the headlights (dark grey so it shows on the black hood).
-    ctx.fillStyle = '#3a3a44';
-    ctx.fillRect(20, -4, 2, 8);
-    // Light bar on the roof centre: dark housing, red on one lateral half
-    // and blue on the other, flashing alternately.
-    const on = Math.floor(performance.now() / 180) % 2 === 0;
+    ctx.beginPath();
+    ctx.moveTo(7, -8.5); ctx.lineTo(11, -7); ctx.lineTo(11, 7); ctx.lineTo(7, 8.5);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-7, -8.5); ctx.lineTo(-11, -7); ctx.lineTo(-11, 7); ctx.lineTo(-7, 8.5);
+    ctx.closePath(); ctx.fill();
+    // Glass shine: one pale diagonal streak on the windshield.
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(8, 6); ctx.lineTo(10, -5); ctx.stroke();
+    // Roof panel (light grey, a separate part from hood and doors).
+    rr(-7, -9, 14, 18, 3);
+    ctx.fillStyle = '#d3d4de';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.30)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // --- Mirrors: small nubs sticking out at the front of the cabin. ---
     ctx.fillStyle = '#14141c';
-    ctx.fillRect(-3, -10, 6, 20);
+    ctx.fillRect(3, -15.5, 4, 2.5);
+    ctx.fillRect(3, 13, 4, 2.5);
+    // --- Wheels: real tyres (rounded, protruding) with a lighter hub. ---
+    const wheel = (x, y) => {
+      rr(x, y, 11, 4.5, 2);
+      ctx.fillStyle = '#111';
+      ctx.fill();
+      rr(x + 3.5, y + 1.25, 4, 2, 1);
+      ctx.fillStyle = '#8a8f98';
+      ctx.fill();
+    };
+    wheel(-16, -16); wheel(7, -16); wheel(-16, 11.5); wheel(7, 11.5);
+    // --- Bumpers: thin chrome strips at nose and tail. ---
+    ctx.fillStyle = '#8a8f98';
+    rr(21, -5.5, 2, 11, 1); ctx.fill();
+    rr(-23, -5.5, 2, 11, 1); ctx.fill();
+    // --- Headlights (front corners, pale yellow) + taillights (rear). ---
+    // (Placed INSIDE the tapered nose/rear: at x~20 the body is only ~±6.5
+    // wide, so lamps at y ±(7..10.5) would float off the body.)
+    ctx.fillStyle = '#ffe9a8';
+    rr(18, -8.5, 3, 3.5, 1); ctx.fill();
+    rr(18, 5, 3, 3.5, 1); ctx.fill();
+    ctx.fillStyle = '#c22a2a';
+    rr(-21.5, -5, 2.5, 3, 1); ctx.fill();
+    rr(-21.5, 2, 2.5, 3, 1); ctx.fill();
+    // --- Grille: dark centre strip on the nose with a lighter slat. ---
+    ctx.fillStyle = '#2e2e36';
+    ctx.fillRect(20.5, -3.5, 1.8, 7);
+    ctx.fillStyle = '#5a5a64';
+    ctx.fillRect(20.5, -0.3, 1.8, 0.6);
+    // --- Door seam (two segments OUTSIDE the roof panel) + handles. ---
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.fillRect(0, -12.5, 1, 3.5);
+    ctx.fillRect(0, 9, 1, 3.5);
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(2, -10.5, 2, 1);
+    ctx.fillRect(2, 9.5, 2, 1);
+    // --- Light bar on the roof: dark housing + red/blue lenses, flashing. ---
+    const on = Math.floor(performance.now() / 180) % 2 === 0;
+    rr(-4, -9.5, 8, 19, 2);
+    ctx.fillStyle = '#14141c';
+    ctx.fill();
+    rr(-3, -8.5, 6, 8, 1.5);
     ctx.fillStyle = on ? '#ff2a2a' : '#2a6aff';
-    ctx.fillRect(-2, -9, 4, 9);
+    ctx.fill();
+    rr(-3, 0.5, 6, 8, 1.5);
     ctx.fillStyle = on ? '#2a6aff' : '#ff2a2a';
-    ctx.fillRect(-2, 0, 4, 9);
+    ctx.fill();
   } else {
     ctx.fillStyle = car.def.color;
     ctx.fillRect(-22, -13, 44, 26);
@@ -434,12 +515,16 @@ export function drawCar(ctx, car) {
     ctx.fillRect(20, -11, 3, 5);
     ctx.fillRect(20, 6, 3, 5);
   }
-  // Wheels.
-  ctx.fillStyle = '#111';
-  ctx.fillRect(-15, -15, 10, 4);
-  ctx.fillRect(-15, 11, 10, 4);
-  ctx.fillRect(8, -15, 10, 4);
-  ctx.fillRect(8, 11, 10, 4);
+  // Wheels (regular cars only — police cars draw their own tyres with hubs
+  // inside the isPolice branch above; the old shared rects would paint over
+  // them).
+  if (!car.isPolice) {
+    ctx.fillStyle = '#111';
+    ctx.fillRect(-15, -15, 10, 4);
+    ctx.fillRect(-15, 11, 10, 4);
+    ctx.fillRect(8, -15, 10, 4);
+    ctx.fillRect(8, 11, 10, 4);
+  }
   if (car.brakeLight) {
     ctx.fillStyle = '#ff2a2a';
     ctx.fillRect(-24, -10, 3, 5);
